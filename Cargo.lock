@@ -70,7 +70,6 @@ dependencies = [
  "http",
  "hyper",
  "percent-encoding",
- "pin-project-lite",
  "reqwest",
  "serde",
  "serde_json",

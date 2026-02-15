@@ -21,7 +21,6 @@ tower-layer = "0.3"
 tower = { version = "0.5", default-features = false, features = ["util"] }
 serde = { version = "1.0", features = ["derive"] }
 percent-encoding = "2.1"
-pin-project-lite = "0.2"
 
 [lints.rust]
 # Safety & correctness
