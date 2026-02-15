@@ -1,7 +1,7 @@
 use axum::{
+    Json,
     extract::State,
     routing::{get, post},
-    Json,
 };
 use axum_wayfind::{
     Router,
@@ -72,10 +72,7 @@ async fn multiple_routes() {
 
 #[tokio::test]
 async fn method_routing() {
-    let app = Router::new().route(
-        "/item",
-        get(|| async { "get" }).post(|| async { "post" }),
-    );
+    let app = Router::new().route("/item", get(|| async { "get" }).post(|| async { "post" }));
 
     let resp = send_request(app.clone(), "GET", "/item", None).await;
     assert_eq!(get_body(resp).await, "get");
@@ -117,9 +114,7 @@ async fn single_path_param() {
 async fn multiple_path_params() {
     let app = Router::new().route(
         "/users/{user_id}/posts/{post_id}",
-        get(|Path((uid, pid)): Path<(u32, u32)>| async move {
-            format!("user {uid} post {pid}")
-        }),
+        get(|Path((uid, pid)): Path<(u32, u32)>| async move { format!("user {uid} post {pid}") }),
     );
 
     let resp = send_request(app, "GET", "/users/1/posts/99", None).await;
@@ -136,9 +131,9 @@ async fn struct_path_params() {
 
     let app = Router::new().route(
         "/users/{user_id}/teams/{team_id}",
-        get(|Path(p): Path<Params>| async move {
-            format!("user {} team {}", p.user_id, p.team_id)
-        }),
+        get(
+            |Path(p): Path<Params>| async move { format!("user {} team {}", p.user_id, p.team_id) },
+        ),
     );
 
     let resp = send_request(app, "GET", "/users/5/teams/alpha", None).await;
@@ -150,10 +145,7 @@ async fn hashmap_path_params() {
     let app = Router::new().route(
         "/users/{user_id}/teams/{team_id}",
         get(|Path(params): Path<HashMap<String, String>>| async move {
-            format!(
-                "user {} team {}",
-                params["user_id"], params["team_id"]
-            )
+            format!("user {} team {}", params["user_id"], params["team_id"])
         }),
     );
 
@@ -174,10 +166,7 @@ async fn wildcard_path_param() {
 
 #[tokio::test]
 async fn percent_decoding() {
-    let app = Router::new().route(
-        "/{key}",
-        get(|Path(key): Path<String>| async move { key }),
-    );
+    let app = Router::new().route("/{key}", get(|Path(key): Path<String>| async move { key }));
 
     let resp = send_request(app, "GET", "/hello%20world", None).await;
     assert_eq!(get_body(resp).await, "hello world");
@@ -252,9 +241,11 @@ async fn with_state() {
     let app = Router::new()
         .route(
             "/greet/{name}",
-            get(|State(state): State<AppState>, Path(name): Path<String>| async move {
-                format!("{}, {name}!", state.greeting)
-            }),
+            get(
+                |State(state): State<AppState>, Path(name): Path<String>| async move {
+                    format!("{}, {name}!", state.greeting)
+                },
+            ),
         )
         .with_state(AppState {
             greeting: "Hello".to_string(),
@@ -328,9 +319,9 @@ async fn route_service_any_method() {
     use tower::service_fn;
 
     let svc = service_fn(|_req: axum::extract::Request| async {
-        Ok::<_, std::convert::Infallible>(
-            axum::response::IntoResponse::into_response("from service"),
-        )
+        Ok::<_, std::convert::Infallible>(axum::response::IntoResponse::into_response(
+            "from service",
+        ))
     });
 
     let app = Router::new().route_service("/svc", svc);

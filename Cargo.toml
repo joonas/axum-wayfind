@@ -23,6 +23,67 @@ serde = { version = "1.0", features = ["derive"] }
 percent-encoding = "2.1"
 pin-project-lite = "0.2"
 
+[lints.rust]
+# Safety & correctness
+unsafe_code = "deny"
+unstable_features = "deny"
+keyword_idents = { level = "deny", priority = 1 }
+let_underscore_drop = "deny"
+non_ascii_idents = "deny"
+
+# Documentation & public API
+missing_debug_implementations = "warn"
+
+# Code quality
+unused_qualifications = "warn"
+unreachable_pub = "warn"
+elided_lifetimes_in_paths = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+
+[lints.clippy]
+# Lint groups
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Promote select items to deny
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+
+# Additional strictness beyond pedantic
+clone_on_ref_ptr = "warn"
+dbg_macro = "warn"
+decimal_literal_representation = "warn"
+deref_by_slicing = "warn"
+empty_structs_with_brackets = "warn"
+format_push_string = "warn"
+if_then_some_else_none = "warn"
+infinite_loop = "warn"
+mod_module_files = "warn"
+multiple_inherent_impl = "warn"
+needless_raw_strings = "warn"
+negative_feature_names = "warn"
+pub_without_shorthand = "warn"
+redundant_type_annotations = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+same_name_method = "warn"
+semicolon_outside_block = "warn"
+str_to_string = "warn"
+string_to_string = "warn"
+tests_outside_test_module = "warn"
+try_err = "warn"
+undocumented_unsafe_blocks = "warn"
+unnecessary_self_imports = "warn"
+unneeded_field_pattern = "warn"
+unseparated_literal_suffix = "warn"
+verbose_file_reads = "warn"
+wildcard_dependencies = "warn"
+
 [dev-dependencies]
 axum = { version = "0.8", features = ["json", "tokio"] }
 tokio = { version = "1.44", features = ["macros", "rt-multi-thread"] }

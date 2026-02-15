@@ -34,7 +34,9 @@ impl PercentDecodedStr {
             .map(|decoded| Self(decoded.as_ref().into()))
     }
 
-    #[must_use] pub fn as_str(&self) -> &str {
+    /// Returns the decoded string as a `&str`.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
         &self.0
     }
 }
@@ -68,13 +70,17 @@ pub enum WayfindUrlParams {
     Params(Vec<(Arc<str>, PercentDecodedStr)>),
     /// A parameter contained bytes that are not valid UTF-8 after
     /// percent-decoding.
-    InvalidUtf8InPathParam { key: Arc<str> },
+    InvalidUtf8InPathParam {
+            /// The parameter name that contained invalid UTF-8.
+            key: Arc<str>,
+        },
 }
 
 impl WayfindUrlParams {
     /// Build `WayfindUrlParams` from a wayfind `Match`, percent-decoding each
     /// parameter value.
-    #[must_use] pub fn from_match<T>(matched: &wayfind::Match<'_, '_, T>) -> Self {
+    #[must_use]
+    pub fn from_match<T>(matched: &wayfind::Match<'_, '_, T>) -> Self {
         let mut params = Vec::with_capacity(matched.parameters.len());
 
         for (key, value) in &matched.parameters {
@@ -299,7 +305,10 @@ impl fmt::Display for ErrorKind {
                 )?;
 
                 if *expected == 1 {
-                    write!(f, ". Note that multiple parameters must be extracted with a tuple `Path<(_, _)>` or a struct `Path<YourParams>`")?;
+                    write!(
+                        f,
+                        ". Note that multiple parameters must be extracted with a tuple `Path<(_, _)>` or a struct `Path<YourParams>`"
+                    )?;
                 }
 
                 Ok(())
@@ -414,9 +423,11 @@ impl IntoResponse for PathRejection {
     fn into_response(self) -> Response {
         match self {
             Self::FailedToDeserializePathParams(inner) => inner.into_response(),
-            Self::MissingPathParams => {
-                (StatusCode::INTERNAL_SERVER_ERROR, "No path parameters found").into_response()
-            }
+            Self::MissingPathParams => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "No path parameters found",
+            )
+                .into_response(),
         }
     }
 }

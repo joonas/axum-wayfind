@@ -144,7 +144,8 @@ where
     S: Clone + Send + Sync + 'static,
 {
     /// Create a new, empty router.
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Self {
             inner: RouterInner {
                 wayfind: wayfind::Router::new(),
@@ -170,15 +171,14 @@ where
     ///
     /// Panics if the path is invalid or conflicts with an existing route.
     #[must_use]
+    #[allow(clippy::panic)] // Intentional: builder panics on invalid routes, matching axum's API.
     pub fn route(mut self, path: &str, method_router: MethodRouter<S>) -> Self {
         let path_arc: Arc<str> = Arc::from(path);
 
         // If this path already exists, merge the method routers.
         if let Some(&existing_id) = self.inner.path_to_route_id.get(&path_arc) {
-            let existing = std::mem::replace(
-                &mut self.inner.routes[existing_id.0],
-                MethodRouter::new(),
-            );
+            let existing =
+                std::mem::replace(&mut self.inner.routes[existing_id.0], MethodRouter::new());
             self.inner.routes[existing_id.0] = existing.merge(method_router);
             return self;
         }
@@ -229,6 +229,7 @@ where
     ///
     /// Panics if the two routers have conflicting routes.
     #[must_use]
+    #[allow(clippy::expect_used)] // Invariant: every RouteId has a corresponding path entry.
     pub fn merge(mut self, other: Self) -> Self {
         let RouterInner {
             routes,
@@ -291,8 +292,7 @@ where
     pub fn route_layer<L>(mut self, layer: L) -> Self
     where
         L: tower_layer::Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
-        L::Service:
-            Service<Request, Error = Infallible> + Clone + Send + Sync + 'static,
+        L::Service: Service<Request, Error = Infallible> + Clone + Send + Sync + 'static,
         <L::Service as Service<Request>>::Response: IntoResponse + 'static,
         <L::Service as Service<Request>>::Future: Send + 'static,
     {
@@ -323,9 +323,8 @@ where
         match &mut self.inner.fallback {
             Fallback::Default => {
                 // Wrap the default 404 in a MethodRouter so the layer applies.
-                let fallback_mr: MethodRouter<S> = axum::routing::any(
-                    || async { StatusCode::NOT_FOUND },
-                );
+                let fallback_mr: MethodRouter<S> =
+                    axum::routing::any(|| async { StatusCode::NOT_FOUND });
                 self.inner.fallback = Fallback::Handler(Box::new(fallback_mr.layer(layer)));
             }
             Fallback::Handler(mr) => {
@@ -374,7 +373,8 @@ where
     /// [`axum::serve`].
     ///
     /// [`MakeService`]: tower::make::MakeService
-    #[must_use] pub const fn into_make_service(self) -> IntoMakeService<Self>
+    #[must_use]
+    pub const fn into_make_service(self) -> IntoMakeService<Self>
     where
         Self: Sized,
     {
@@ -423,9 +423,7 @@ impl Service<Request> for Router<()> {
             None => {
                 // No route matched — invoke the fallback.
                 match &self.inner.fallback {
-                    Fallback::Default => {
-                        Box::pin(ready(Ok(StatusCode::NOT_FOUND.into_response())))
-                    }
+                    Fallback::Default => Box::pin(ready(Ok(StatusCode::NOT_FOUND.into_response()))),
                     Fallback::Handler(mr) => {
                         let mut mr = mr.clone();
                         Box::pin(async move { mr.call(req).await })

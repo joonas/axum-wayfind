@@ -13,7 +13,8 @@
 /// - `{*name}` → `<*name>`
 ///
 /// Static segments and leading `/` are preserved as-is.
-pub fn axum_to_wayfind(path: &str) -> String {
+#[allow(clippy::redundant_pub_crate)] // Explicit crate visibility on private-module item.
+pub(crate) fn axum_to_wayfind(path: &str) -> String {
     let mut result = String::with_capacity(path.len());
     let mut chars = path.chars();
 

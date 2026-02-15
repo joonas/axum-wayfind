@@ -9,7 +9,7 @@
 use super::{ErrorKind, PathDeserializationError, PercentDecodedStr};
 use serde::{
     Deserializer,
-    de::{self, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor},
+    de::{DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor},
     forward_to_deserialize_any,
 };
 use std::{any::type_name, sync::Arc};
@@ -337,7 +337,7 @@ macro_rules! parse_value {
                             value: self.value.as_str().to_owned(),
                             expected_type: $ty,
                         },
-                        KeyOrIdx::Idx { idx: index, key: _ } => ErrorKind::ParseErrorAtIndex {
+                        KeyOrIdx::Idx { idx: index, .. } => ErrorKind::ParseErrorAtIndex {
                             index,
                             value: self.value.as_str().to_owned(),
                             expected_type: $ty,
@@ -471,7 +471,7 @@ impl<'de> Deserializer<'de> for ValueDeserializer<'de> {
                 T: DeserializeSeed<'de>,
             {
                 match self.key.take() {
-                    Some(KeyOrIdx::Idx { idx: _, key }) => {
+                    Some(KeyOrIdx::Idx { key, .. }) => {
                         return seed.deserialize(KeyDeserializer { key }).map(Some);
                     }
                     Some(KeyOrIdx::Key(_)) => {
@@ -575,7 +575,7 @@ impl<'de> EnumAccess<'de> for EnumDeserializer<'de> {
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Self::Error>
     where
-        V: de::DeserializeSeed<'de>,
+        V: DeserializeSeed<'de>,
     {
         Ok((
             seed.deserialize(KeyDeserializer { key: self.value })?,

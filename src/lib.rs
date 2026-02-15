@@ -17,6 +17,8 @@
 //! Handlers, method filters (`get`, `post`, …), middleware, `Json`, `State`,
 //! and all other axum types work unchanged.
 
+#![warn(missing_docs)]
+
 pub mod extract;
 mod router;
 mod syntax;
