@@ -42,6 +42,7 @@ struct RouteId(usize);
 // ==============================================================================
 
 /// How to handle requests that don't match any registered route.
+#[derive(Clone)]
 enum Fallback<S> {
     /// Return a plain 404 Not Found.
     Default,
@@ -57,18 +58,6 @@ where
         match self {
             Self::Default => Fallback::Default,
             Self::Handler(mr) => Fallback::Handler(Box::new(mr.with_state(state))),
-        }
-    }
-}
-
-impl<S> Clone for Fallback<S>
-where
-    S: Clone,
-{
-    fn clone(&self) -> Self {
-        match self {
-            Self::Default => Self::Default,
-            Self::Handler(mr) => Self::Handler(mr.clone()),
         }
     }
 }
@@ -95,6 +84,7 @@ pub struct Router<S = ()> {
     inner: RouterInner<S>,
 }
 
+#[derive(Clone)]
 struct RouterInner<S> {
     /// wayfind path tree: maps translated templates to `RouteId`.
     wayfind: wayfind::Router<RouteId>,
@@ -122,13 +112,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            inner: RouterInner {
-                wayfind: self.inner.wayfind.clone(),
-                routes: self.inner.routes.clone(),
-                route_id_to_path: self.inner.route_id_to_path.clone(),
-                path_to_route_id: self.inner.path_to_route_id.clone(),
-                fallback: self.inner.fallback.clone(),
-            },
+            inner: self.inner.clone(),
         }
     }
 }
