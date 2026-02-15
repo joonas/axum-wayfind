@@ -347,10 +347,8 @@ where
     // IntoMakeService
     // =========================================================================
 
-    /// Convert this router into a [`MakeService`], suitable for use with
-    /// [`axum::serve`].
-    ///
-    /// [`MakeService`]: tower::make::MakeService
+    /// Convert this router into a `MakeService`, suitable for use with
+    /// `axum::serve`.
     #[must_use]
     pub const fn into_make_service(self) -> IntoMakeService<Self>
     where
@@ -419,10 +417,8 @@ impl Service<Request> for Router<()> {
 // IntoMakeService
 // ==============================================================================
 
-/// A [`MakeService`] wrapper so `axum::serve(listener, router.into_make_service())`
+/// A `MakeService` wrapper so `axum::serve(listener, router.into_make_service())`
 /// works.
-///
-/// [`MakeService`]: tower::make::MakeService
 #[derive(Debug, Clone)]
 pub struct IntoMakeService<S> {
     svc: S,
