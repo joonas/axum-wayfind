@@ -105,7 +105,7 @@ impl<'de> Deserializer<'de> for PathDeserializer<'de> {
         let key = &self.url_params[0].0;
         let value = &self.url_params[0].1;
         visitor
-            .visit_borrowed_str(value)
+            .visit_str(value)
             .map_err(|e: PathDeserializationError| {
                 if let ErrorKind::Message(message) = &e.kind {
                     PathDeserializationError::new(ErrorKind::DeserializeError {
@@ -397,7 +397,7 @@ impl<'de> Deserializer<'de> for ValueDeserializer<'de> {
         V: Visitor<'de>,
     {
         visitor
-            .visit_borrowed_str(self.value)
+            .visit_str(self.value)
             .map_err(|e: PathDeserializationError| {
                 if let (ErrorKind::Message(message), Some(key)) = (&e.kind, self.key.as_ref()) {
                     PathDeserializationError::new(ErrorKind::DeserializeError {
