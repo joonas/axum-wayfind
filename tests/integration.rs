@@ -255,7 +255,7 @@ mod tests {
                 ),
             )
             .with_state(AppState {
-                greeting: "Hello".to_string(),
+                greeting: "Hello".to_owned(),
             });
 
         let resp = send_request(app, "GET", "/greet/Alice", None).await;
