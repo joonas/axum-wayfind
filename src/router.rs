@@ -197,6 +197,9 @@ where
         self.route(path, axum::routing::any_service(service))
     }
 
+    // TODO: Add `nest` and `nest_service` methods. These require translating
+    // wayfind's prefix-matching semantics to work with axum's nested routers.
+
     // =========================================================================
     // Merge
     // =========================================================================
