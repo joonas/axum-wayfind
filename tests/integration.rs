@@ -1,4 +1,5 @@
 #[cfg(test)]
+#[allow(clippy::expect_used)] // Tests panic on failure by design.
 mod tests {
     use axum::{
         Json,
