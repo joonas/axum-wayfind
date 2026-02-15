@@ -25,12 +25,15 @@ use std::{fmt, ops::Deref, sync::Arc};
 pub struct PercentDecodedStr(Arc<str>);
 
 impl PercentDecodedStr {
-    /// Attempt to percent-decode the given string. Returns `None` if the
-    /// decoded bytes are not valid UTF-8.
-    pub fn new<S: AsRef<str>>(s: S) -> Option<Self> {
+    /// Attempt to percent-decode the given string.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Utf8Error`](std::str::Utf8Error) if the decoded bytes are
+    /// not valid UTF-8.
+    pub fn new<S: AsRef<str>>(s: S) -> Result<Self, std::str::Utf8Error> {
         percent_encoding::percent_decode(s.as_ref().as_bytes())
             .decode_utf8()
-            .ok()
             .map(|decoded| Self(decoded.as_ref().into()))
     }
 
@@ -90,8 +93,8 @@ impl WayfindUrlParams {
             let key: Arc<str> = Arc::from(*key);
 
             match PercentDecodedStr::new(*value) {
-                Some(decoded) => params.push((key, decoded)),
-                None => return Self::InvalidUtf8InPathParam { key },
+                Ok(decoded) => params.push((key, decoded)),
+                Err(_) => return Self::InvalidUtf8InPathParam { key },
             }
         }
 
