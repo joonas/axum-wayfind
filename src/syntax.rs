@@ -16,7 +16,8 @@
 ///
 /// # Panics
 ///
-/// Panics if a `{` is not closed by a matching `}`.
+/// Panics if a `{` is not closed by a matching `}`, or if a `}` appears
+/// without a preceding `{`.
 #[allow(clippy::redundant_pub_crate)] // Explicit crate visibility on private-module item.
 #[allow(clippy::panic)] // Intentional: invalid path syntax is a programming error.
 pub(crate) fn axum_to_wayfind(path: &str) -> String {
@@ -37,6 +38,7 @@ pub(crate) fn axum_to_wayfind(path: &str) -> String {
             }
             assert!(closed, "unclosed `{{` in path template: `{path}`");
         } else {
+            assert!(ch != '}', "unmatched `}}` in path template: `{path}`");
             result.push(ch);
         }
     }
@@ -85,5 +87,11 @@ mod tests {
     #[should_panic(expected = "unclosed `{` in path template")]
     fn unclosed_brace_panics() {
         axum_to_wayfind("/users/{id");
+    }
+
+    #[test]
+    #[should_panic(expected = "unmatched `}` in path template")]
+    fn unmatched_close_brace_panics() {
+        axum_to_wayfind("/users/id}");
     }
 }
