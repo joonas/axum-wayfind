@@ -253,6 +253,8 @@ pub enum ErrorKind {
         value: String,
         /// The expected type of the value.
         expected_type: &'static str,
+        /// The underlying parse error message (e.g. "overflow", "invalid digit").
+        message: String,
     },
 
     /// Failed to parse the value at a specific index into the expected type.
@@ -263,6 +265,8 @@ pub enum ErrorKind {
         value: String,
         /// The expected type of the value.
         expected_type: &'static str,
+        /// The underlying parse error message.
+        message: String,
     },
 
     /// Failed to parse a value into the expected type.
@@ -271,6 +275,8 @@ pub enum ErrorKind {
         value: String,
         /// The expected type of the value.
         expected_type: &'static str,
+        /// The underlying parse error message.
+        message: String,
     },
 
     /// A parameter contained text that, once percent decoded, wasn't valid UTF-8.
@@ -324,21 +330,27 @@ impl fmt::Display for ErrorKind {
                 key,
                 value,
                 expected_type,
+                message,
             } => write!(
                 f,
-                "Cannot parse `{key}` with value `{value}` to a `{expected_type}`"
+                "Cannot parse `{key}` with value `{value}` to a `{expected_type}`: {message}"
             ),
             Self::ParseError {
                 value,
                 expected_type,
-            } => write!(f, "Cannot parse `{value}` to a `{expected_type}`"),
+                message,
+            } => write!(
+                f,
+                "Cannot parse `{value}` to a `{expected_type}`: {message}"
+            ),
             Self::ParseErrorAtIndex {
                 index,
                 value,
                 expected_type,
+                message,
             } => write!(
                 f,
-                "Cannot parse value at index {index} with value `{value}` to a `{expected_type}`"
+                "Cannot parse value at index {index} with value `{value}` to a `{expected_type}`: {message}"
             ),
             Self::DeserializeError {
                 key,

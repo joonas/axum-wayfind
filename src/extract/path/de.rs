@@ -39,12 +39,16 @@ macro_rules! parse_single_value {
                     .expected(1));
             }
 
-            let value = self.url_params[0].1.parse().map_err(|_| {
-                PathDeserializationError::new(ErrorKind::ParseError {
-                    value: self.url_params[0].1.as_str().to_owned(),
-                    expected_type: $ty,
-                })
-            })?;
+            let value = match self.url_params[0].1.parse() {
+                Ok(v) => v,
+                Err(err) => {
+                    return Err(PathDeserializationError::new(ErrorKind::ParseError {
+                        value: self.url_params[0].1.as_str().to_owned(),
+                        expected_type: $ty,
+                        message: format!("{err}"),
+                    }));
+                }
+            };
             visitor.$visit_fn(value)
         }
     };
@@ -329,28 +333,35 @@ macro_rules! parse_value {
         where
             V: Visitor<'de>,
         {
-            let v = self.value.parse().map_err(|_| {
-                if let Some(key) = self.key.take() {
-                    let kind = match key {
-                        KeyOrIdx::Key(key) => ErrorKind::ParseErrorAtKey {
-                            key: key.to_owned(),
+            let v = match self.value.parse() {
+                Ok(v) => v,
+                Err(err) => {
+                    let message = format!("{err}");
+                    return Err(if let Some(key) = self.key.take() {
+                        let kind = match key {
+                            KeyOrIdx::Key(key) => ErrorKind::ParseErrorAtKey {
+                                key: key.to_owned(),
+                                value: self.value.as_str().to_owned(),
+                                expected_type: $ty,
+                                message,
+                            },
+                            KeyOrIdx::Idx { idx: index, .. } => ErrorKind::ParseErrorAtIndex {
+                                index,
+                                value: self.value.as_str().to_owned(),
+                                expected_type: $ty,
+                                message,
+                            },
+                        };
+                        PathDeserializationError::new(kind)
+                    } else {
+                        PathDeserializationError::new(ErrorKind::ParseError {
                             value: self.value.as_str().to_owned(),
                             expected_type: $ty,
-                        },
-                        KeyOrIdx::Idx { idx: index, .. } => ErrorKind::ParseErrorAtIndex {
-                            index,
-                            value: self.value.as_str().to_owned(),
-                            expected_type: $ty,
-                        },
-                    };
-                    PathDeserializationError::new(kind)
-                } else {
-                    PathDeserializationError::new(ErrorKind::ParseError {
-                        value: self.value.as_str().to_owned(),
-                        expected_type: $ty,
-                    })
+                            message,
+                        })
+                    });
                 }
-            })?;
+            };
             visitor.$visit_fn(v)
         }
     };
