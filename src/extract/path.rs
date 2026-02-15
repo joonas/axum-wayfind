@@ -50,6 +50,9 @@ impl Deref for PercentDecodedStr {
     }
 }
 
+/// Creates a `PercentDecodedStr` from an already-decoded string, without
+/// performing any percent-decoding. Use [`PercentDecodedStr::new`] to
+/// decode raw URL parameter values.
 impl std::str::FromStr for PercentDecodedStr {
     type Err = std::convert::Infallible;
 
