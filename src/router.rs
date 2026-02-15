@@ -81,11 +81,6 @@ where
 /// # let _: Router = app;
 /// ```
 pub struct Router<S = ()> {
-    inner: RouterInner<S>,
-}
-
-#[derive(Clone)]
-struct RouterInner<S> {
     /// wayfind path tree: maps translated templates to `RouteId`.
     wayfind: wayfind::Router<RouteId>,
     /// Route endpoints indexed by `RouteId`, all as `MethodRouter`.
@@ -101,8 +96,8 @@ struct RouterInner<S> {
 impl<S> fmt::Debug for Router<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Router")
-            .field("routes", &self.inner.routes.len())
-            .finish()
+            .field("routes", &self.routes.len())
+            .finish_non_exhaustive()
     }
 }
 
@@ -112,7 +107,11 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
+            wayfind: self.wayfind.clone(),
+            routes: self.routes.clone(),
+            route_id_to_path: self.route_id_to_path.clone(),
+            path_to_route_id: self.path_to_route_id.clone(),
+            fallback: self.fallback.clone(),
         }
     }
 }
@@ -131,13 +130,11 @@ where
     #[must_use]
     pub fn new() -> Self {
         Self {
-            inner: RouterInner {
-                wayfind: wayfind::Router::new(),
-                routes: Vec::new(),
-                route_id_to_path: HashMap::new(),
-                path_to_route_id: HashMap::new(),
-                fallback: Fallback::Default,
-            },
+            wayfind: wayfind::Router::new(),
+            routes: Vec::new(),
+            route_id_to_path: HashMap::new(),
+            path_to_route_id: HashMap::new(),
+            fallback: Fallback::Default,
         }
     }
 
@@ -160,26 +157,24 @@ where
         let path_arc: Arc<str> = Arc::from(path);
 
         // If this path already exists, merge the method routers.
-        if let Some(&existing_id) = self.inner.path_to_route_id.get(&path_arc) {
-            let existing = std::mem::take(&mut self.inner.routes[existing_id.0]);
-            self.inner.routes[existing_id.0] = existing.merge(method_router);
+        if let Some(&existing_id) = self.path_to_route_id.get(&path_arc) {
+            let existing = std::mem::take(&mut self.routes[existing_id.0]);
+            self.routes[existing_id.0] = existing.merge(method_router);
             return self;
         }
 
         // New route — translate syntax and insert into wayfind.
-        let route_id = RouteId(self.inner.routes.len());
+        let route_id = RouteId(self.routes.len());
         let translated = syntax::axum_to_wayfind(path);
 
-        self.inner
-            .wayfind
+        self.wayfind
             .insert(&translated, route_id)
             .unwrap_or_else(|err| panic!("failed to insert route `{path}`: {err}"));
 
-        self.inner.routes.push(method_router);
-        self.inner
-            .route_id_to_path
+        self.routes.push(method_router);
+        self.route_id_to_path
             .insert(route_id, Arc::clone(&path_arc));
-        self.inner.path_to_route_id.insert(path_arc, route_id);
+        self.path_to_route_id.insert(path_arc, route_id);
 
         self
     }
@@ -214,12 +209,12 @@ where
     #[must_use]
     #[allow(clippy::expect_used)] // Invariant: every RouteId has a corresponding path entry.
     pub fn merge(mut self, other: Self) -> Self {
-        let RouterInner {
+        let Self {
             routes,
             route_id_to_path,
             fallback,
             ..
-        } = other.inner;
+        } = other;
 
         for (old_id, method_router) in routes.into_iter().enumerate() {
             let old_id = RouteId(old_id);
@@ -232,7 +227,7 @@ where
 
         // Merge fallback: other's non-default fallback takes precedence.
         if let Fallback::Handler(h) = fallback {
-            self.inner.fallback = Fallback::Handler(h);
+            self.fallback = Fallback::Handler(h);
         }
 
         self
@@ -249,7 +244,7 @@ where
         H: axum::handler::Handler<T, S>,
         T: 'static,
     {
-        self.inner.fallback = Fallback::Handler(Box::new(axum::routing::any(handler)));
+        self.fallback = Fallback::Handler(Box::new(axum::routing::any(handler)));
         self
     }
 
@@ -261,7 +256,7 @@ where
         T::Response: IntoResponse + 'static,
         T::Future: Send + 'static,
     {
-        self.inner.fallback = Fallback::Handler(Box::new(axum::routing::any_service(service)));
+        self.fallback = Fallback::Handler(Box::new(axum::routing::any_service(service)));
         self
     }
 
@@ -279,7 +274,7 @@ where
         <L::Service as Service<Request>>::Response: IntoResponse + 'static,
         <L::Service as Service<Request>>::Future: Send + 'static,
     {
-        for mr in &mut self.inner.routes {
+        for mr in &mut self.routes {
             let taken = std::mem::take(mr);
             *mr = taken.route_layer(layer.clone());
         }
@@ -297,18 +292,18 @@ where
         <L::Service as Service<Request>>::Future: Send + 'static,
     {
         // Apply to all route endpoints.
-        for mr in &mut self.inner.routes {
+        for mr in &mut self.routes {
             let taken = std::mem::take(mr);
             *mr = taken.layer(layer.clone());
         }
 
         // Apply to the fallback too.
-        match &mut self.inner.fallback {
+        match &mut self.fallback {
             Fallback::Default => {
                 // Wrap the default 404 in a MethodRouter so the layer applies.
                 let fallback_mr: MethodRouter<S> =
                     axum::routing::any(|| async { StatusCode::NOT_FOUND });
-                self.inner.fallback = Fallback::Handler(Box::new(fallback_mr.layer(layer)));
+                self.fallback = Fallback::Handler(Box::new(fallback_mr.layer(layer)));
             }
             Fallback::Handler(mr) => {
                 let taken = std::mem::take(mr);
@@ -329,22 +324,19 @@ where
     /// be served directly.
     pub fn with_state(self, state: S) -> Router<()> {
         let routes = self
-            .inner
             .routes
             .into_iter()
             .map(|mr| mr.with_state(state.clone()))
             .collect();
 
-        let fallback = self.inner.fallback.with_state(state);
+        let fallback = self.fallback.with_state(state);
 
         Router {
-            inner: RouterInner {
-                wayfind: self.inner.wayfind,
-                routes,
-                route_id_to_path: self.inner.route_id_to_path,
-                path_to_route_id: self.inner.path_to_route_id,
-                fallback,
-            },
+            wayfind: self.wayfind,
+            routes,
+            route_id_to_path: self.route_id_to_path,
+            path_to_route_id: self.path_to_route_id,
+            fallback,
         }
     }
 
@@ -385,7 +377,7 @@ impl Service<Request> for Router<()> {
         // Search the wayfind tree for a matching route.
         let path = req.uri().path().to_owned();
 
-        match self.inner.wayfind.search(&path) {
+        match self.wayfind.search(&path) {
             Some(matched) => {
                 let route_id = *matched.data;
 
@@ -395,17 +387,17 @@ impl Service<Request> for Router<()> {
                 req.extensions_mut().insert(params);
 
                 // Insert MatchedPath using the original Axum-syntax template.
-                if let Some(template) = self.inner.route_id_to_path.get(&route_id) {
+                if let Some(template) = self.route_id_to_path.get(&route_id) {
                     req.extensions_mut()
                         .insert(MatchedPath(Arc::clone(template)));
                 }
 
-                let mut mr = self.inner.routes[route_id.0].clone();
+                let mut mr = self.routes[route_id.0].clone();
                 Box::pin(async move { mr.call(req).await })
             }
             None => {
                 // No route matched — invoke the fallback.
-                match &self.inner.fallback {
+                match &self.fallback {
                     Fallback::Default => Box::pin(ready(Ok(StatusCode::NOT_FOUND.into_response()))),
                     Fallback::Handler(mr) => {
                         let mut mr = mr.clone();
