@@ -71,7 +71,7 @@ impl std::str::FromStr for PercentDecodedStr {
 /// Extracted URL parameters from a wayfind match, stored as a request
 /// extension. This is our equivalent of axum's internal `UrlParams`.
 #[derive(Clone, Debug)]
-pub enum WayfindUrlParams {
+pub(crate) enum WayfindUrlParams {
     /// Successfully decoded parameters.
     Params(Vec<(Arc<str>, PercentDecodedStr)>),
     /// A parameter contained bytes that are not valid UTF-8 after
@@ -86,7 +86,7 @@ impl WayfindUrlParams {
     /// Build `WayfindUrlParams` from a wayfind `Match`, percent-decoding each
     /// parameter value.
     #[must_use]
-    pub fn from_match<T>(matched: &wayfind::Match<'_, '_, T>) -> Self {
+    pub(crate) fn from_match<T>(matched: &wayfind::Match<'_, '_, T>) -> Self {
         let mut params = Vec::with_capacity(matched.parameters.len());
 
         for (key, value) in &matched.parameters {
