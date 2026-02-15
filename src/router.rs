@@ -373,6 +373,7 @@ impl Service<Request> for Router<()> {
         Poll::Ready(Ok(()))
     }
 
+    #[allow(clippy::expect_used)] // Invariant: every RouteId has a corresponding path entry.
     fn call(&mut self, mut req: Request) -> Self::Future {
         // Search the wayfind tree for a matching route.
         let path = req.uri().path().to_owned();
@@ -387,10 +388,12 @@ impl Service<Request> for Router<()> {
                 req.extensions_mut().insert(params);
 
                 // Insert MatchedPath using the original Axum-syntax template.
-                if let Some(template) = self.route_id_to_path.get(&route_id) {
-                    req.extensions_mut()
-                        .insert(MatchedPath(Arc::clone(template)));
-                }
+                let template = self
+                    .route_id_to_path
+                    .get(&route_id)
+                    .expect("every route should have a path");
+                req.extensions_mut()
+                    .insert(MatchedPath(Arc::clone(template)));
 
                 let mut mr = self.routes[route_id.0].clone();
                 Box::pin(async move { mr.call(req).await })
