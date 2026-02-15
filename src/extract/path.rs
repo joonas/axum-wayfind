@@ -276,7 +276,7 @@ pub enum ErrorKind {
         key: String,
     },
 
-    /// Tried to serialize into an unsupported type such as nested maps.
+    /// Tried to deserialize into an unsupported type such as nested maps.
     UnsupportedType {
         /// The name of the unsupported type.
         name: &'static str,
