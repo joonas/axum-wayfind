@@ -212,6 +212,34 @@ mod tests {
     }
 
     // ==============================================================================
+    // Root Route
+    // ==============================================================================
+
+    #[tokio::test]
+    async fn root_route() {
+        let app = Router::new().route("/", get(|| async { "root" }));
+
+        let resp = send_request(app, "GET", "/", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "root");
+    }
+
+    // ==============================================================================
+    // Error Paths
+    // ==============================================================================
+
+    #[tokio::test]
+    async fn path_param_type_mismatch_returns_400() {
+        let app = Router::new().route(
+            "/users/{id}",
+            get(|Path(id): Path<u32>| async move { format!("user {id}") }),
+        );
+
+        let resp = send_request(app, "GET", "/users/abc", None).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // ==============================================================================
     // Fallback
     // ==============================================================================
 
