@@ -177,8 +177,7 @@ where
 
         // If this path already exists, merge the method routers.
         if let Some(&existing_id) = self.inner.path_to_route_id.get(&path_arc) {
-            let existing =
-                std::mem::replace(&mut self.inner.routes[existing_id.0], MethodRouter::new());
+            let existing = std::mem::take(&mut self.inner.routes[existing_id.0]);
             self.inner.routes[existing_id.0] = existing.merge(method_router);
             return self;
         }
@@ -297,7 +296,7 @@ where
         <L::Service as Service<Request>>::Future: Send + 'static,
     {
         for mr in &mut self.inner.routes {
-            let taken = std::mem::replace(mr, MethodRouter::new());
+            let taken = std::mem::take(mr);
             *mr = taken.route_layer(layer.clone());
         }
         self
@@ -315,7 +314,7 @@ where
     {
         // Apply to all route endpoints.
         for mr in &mut self.inner.routes {
-            let taken = std::mem::replace(mr, MethodRouter::new());
+            let taken = std::mem::take(mr);
             *mr = taken.layer(layer.clone());
         }
 
@@ -328,7 +327,7 @@ where
                 self.inner.fallback = Fallback::Handler(Box::new(fallback_mr.layer(layer)));
             }
             Fallback::Handler(mr) => {
-                let taken = std::mem::replace(mr, Box::new(MethodRouter::new()));
+                let taken = std::mem::take(mr);
                 *mr = Box::new(taken.layer(layer));
             }
         }
