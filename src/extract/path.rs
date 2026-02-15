@@ -74,9 +74,9 @@ pub enum WayfindUrlParams {
     /// A parameter contained bytes that are not valid UTF-8 after
     /// percent-decoding.
     InvalidUtf8InPathParam {
-            /// The parameter name that contained invalid UTF-8.
-            key: Arc<str>,
-        },
+        /// The parameter name that contained invalid UTF-8.
+        key: Arc<str>,
+    },
 }
 
 impl WayfindUrlParams {
