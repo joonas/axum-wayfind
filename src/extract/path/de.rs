@@ -454,7 +454,6 @@ impl<'de> Deserializer<'de> for ValueDeserializer<'de> {
         visitor.visit_newtype_struct(self)
     }
 
-    #[allow(clippy::expect_used)] // Invariant: `ValueDeserializer` always has a key when called for tuple deserialization.
     fn deserialize_tuple<V>(self, len: usize, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: Visitor<'de>,
@@ -491,9 +490,11 @@ impl<'de> Deserializer<'de> for ValueDeserializer<'de> {
         }
 
         if len == 2 {
-            let key = self
-                .key
-                .expect("key must be present for tuple deserialization");
+            let Some(key) = self.key else {
+                return Err(PathDeserializationError::custom(
+                    "key must be present for tuple deserialization",
+                ));
+            };
             visitor.visit_seq(PairDeserializer {
                 key: Some(key),
                 value: Some(self.value),
