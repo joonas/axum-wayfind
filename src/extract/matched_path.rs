@@ -48,16 +48,14 @@ where
             .extensions
             .get::<Self>()
             .cloned()
-            .ok_or(MatchedPathRejection::MatchedPathMissing)
+            .ok_or(MatchedPathRejection)
     }
 }
 
-/// Rejection for [`MatchedPath`].
+/// Rejection for [`MatchedPath`] — returned when no matched path was
+/// found in the request extensions.
 #[derive(Debug)]
-pub enum MatchedPathRejection {
-    /// No matched path was found in the request extensions.
-    MatchedPathMissing,
-}
+pub struct MatchedPathRejection;
 
 impl IntoResponse for MatchedPathRejection {
     fn into_response(self) -> Response {
