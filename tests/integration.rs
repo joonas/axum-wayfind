@@ -239,6 +239,47 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 
+    #[tokio::test]
+    async fn wrong_number_of_path_params() {
+        // Route has two params but we extract as a single `u32`.
+        // This is a programming error rather than bad user input, so
+        // axum's Path extractor returns 500 for parameter count mismatches.
+        let app = Router::new().route(
+            "/users/{id}/posts/{post_id}",
+            get(|Path(id): Path<u32>| async move { format!("user {id}") }),
+        );
+
+        let resp = send_request(app, "GET", "/users/1/posts/2", None).await;
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn enum_path_param() {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "lowercase")]
+        enum Color {
+            Red,
+            Blue,
+        }
+
+        let app = Router::new().route(
+            "/color/{color}",
+            get(|Path(color): Path<Color>| async move {
+                match color {
+                    Color::Red => "red",
+                    Color::Blue => "blue",
+                }
+            }),
+        );
+
+        let resp = send_request(app.clone(), "GET", "/color/red", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "red");
+
+        let resp = send_request(app, "GET", "/color/green", None).await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
     // ==============================================================================
     // Fallback
     // ==============================================================================
@@ -260,6 +301,26 @@ mod tests {
         let resp = send_request(app, "GET", "/not-here", None).await;
         assert_eq!(resp.status(), StatusCode::IM_A_TEAPOT);
         assert_eq!(get_body(resp).await, "teapot");
+    }
+
+    #[tokio::test]
+    async fn fallback_service() {
+        use tower::service_fn;
+
+        let svc = service_fn(|_req: axum::extract::Request| async {
+            Ok::<_, std::convert::Infallible>(axum::response::IntoResponse::into_response((
+                StatusCode::SERVICE_UNAVAILABLE,
+                "maintenance",
+            )))
+        });
+
+        let app = Router::new()
+            .route("/exists", get(|| async { "ok" }))
+            .fallback_service(svc);
+
+        let resp = send_request(app, "GET", "/not-here", None).await;
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(get_body(resp).await, "maintenance");
     }
 
     // ==============================================================================
@@ -343,6 +404,102 @@ mod tests {
 
         let resp = send_request(app, "GET", "/posts", None).await;
         assert_eq!(get_body(resp).await, "posts");
+    }
+
+    // ==============================================================================
+    // route_service
+    // ==============================================================================
+
+    // ==============================================================================
+    // Layers
+    // ==============================================================================
+
+    #[tokio::test]
+    async fn route_layer_applies_to_routes_only() {
+        // `route_layer` should apply the layer to routes but not the fallback.
+        // We use SetResponseHeader to add a custom header so we can observe the
+        // layer's effect.
+        use tower_http::set_header::SetResponseHeaderLayer;
+
+        let app = Router::new()
+            .route("/exists", get(|| async { "ok" }))
+            .route_layer(SetResponseHeaderLayer::overriding(
+                http::header::HeaderName::from_static("x-custom"),
+                http::HeaderValue::from_static("layered"),
+            ));
+
+        // Route should have the header.
+        let resp = send_request(app.clone(), "GET", "/exists", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get("x-custom")
+                .expect("header")
+                .to_str()
+                .expect("str"),
+            "layered"
+        );
+
+        // Fallback (404) should NOT have the header.
+        let resp = send_request(app, "GET", "/not-here", None).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert!(resp.headers().get("x-custom").is_none());
+    }
+
+    #[tokio::test]
+    async fn layer_applies_to_routes_and_fallback() {
+        use tower_http::set_header::SetResponseHeaderLayer;
+
+        let app = Router::new()
+            .route("/exists", get(|| async { "ok" }))
+            .layer(SetResponseHeaderLayer::overriding(
+                http::header::HeaderName::from_static("x-custom"),
+                http::HeaderValue::from_static("layered"),
+            ));
+
+        // Route should have the header.
+        let resp = send_request(app.clone(), "GET", "/exists", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get("x-custom")
+                .expect("header")
+                .to_str()
+                .expect("str"),
+            "layered"
+        );
+
+        // Fallback should also have the header.
+        let resp = send_request(app, "GET", "/not-here", None).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            resp.headers()
+                .get("x-custom")
+                .expect("header")
+                .to_str()
+                .expect("str"),
+            "layered"
+        );
+    }
+
+    // ==============================================================================
+    // Merge (additional)
+    // ==============================================================================
+
+    #[tokio::test]
+    async fn merge_routers_with_overlapping_methods() {
+        // Two routers register different methods on the same path. After merge,
+        // both methods should work.
+        let router_get = Router::new().route("/item", get(|| async { "get" }));
+        let router_post = Router::new().route("/item", post(|| async { "post" }));
+
+        let app = router_get.merge(router_post);
+
+        let resp = send_request(app.clone(), "GET", "/item", None).await;
+        assert_eq!(get_body(resp).await, "get");
+
+        let resp = send_request(app, "POST", "/item", None).await;
+        assert_eq!(get_body(resp).await, "post");
     }
 
     // ==============================================================================
