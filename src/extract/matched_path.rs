@@ -11,7 +11,10 @@ use axum_core::response::{IntoResponse, Response};
 use http::{StatusCode, request::Parts};
 use std::{convert::Infallible, fmt, sync::Arc};
 
-/// Access the path template that matched the current request.
+/// Access the original route template that matched the current request.
+///
+/// The returned string is the route pattern as registered (e.g.
+/// `"/users/{id}"`), **not** the actual request URI (e.g. `"/users/42"`).
 ///
 /// ```rust,no_run
 /// use axum_wayfind::{Router, extract::MatchedPath};
@@ -30,7 +33,7 @@ use std::{convert::Infallible, fmt, sync::Arc};
 pub struct MatchedPath(pub(crate) Arc<str>);
 
 impl MatchedPath {
-    /// Returns a `str` representation of the matched path template.
+    /// Returns the original route template as a `str` (e.g. `"/users/{id}"`).
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
