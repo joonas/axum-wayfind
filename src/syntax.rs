@@ -28,15 +28,29 @@ pub(crate) fn axum_to_wayfind(path: &str) -> String {
         if ch == '{' {
             result.push('<');
             let mut closed = false;
+            let mut name_len = 0_usize;
+            let mut is_wildcard = false;
             for inner in chars.by_ref() {
                 if inner == '}' {
                     result.push('>');
                     closed = true;
                     break;
                 }
+                if inner == '*' && name_len == 0 {
+                    is_wildcard = true;
+                }
+                name_len += 1;
                 result.push(inner);
             }
             assert!(closed, "unclosed `{{` in path template: `{path}`");
+            assert!(
+                name_len > 0,
+                "empty parameter name in path template: `{path}`"
+            );
+            assert!(
+                !(is_wildcard && name_len == 1),
+                "wildcard `*` without a name in path template: `{path}`"
+            );
         } else {
             assert!(ch != '}', "unmatched `}}` in path template: `{path}`");
             result.push(ch);
@@ -93,5 +107,17 @@ mod tests {
     #[should_panic(expected = "unmatched `}` in path template")]
     fn unmatched_close_brace_panics() {
         axum_to_wayfind("/users/id}");
+    }
+
+    #[test]
+    #[should_panic(expected = "empty parameter name in path template")]
+    fn empty_param_name_panics() {
+        axum_to_wayfind("/users/{}");
+    }
+
+    #[test]
+    #[should_panic(expected = "wildcard `*` without a name in path template")]
+    fn wildcard_without_name_panics() {
+        axum_to_wayfind("/files/{*}");
     }
 }
