@@ -192,7 +192,8 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if the path is invalid or conflicts with an existing route.
+    /// Panics if the path does not start with `/`, is otherwise invalid, or
+    /// conflicts with an existing route.
     #[must_use]
     pub fn route_service<T>(self, path: &str, service: T) -> Self
     where
