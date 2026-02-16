@@ -413,17 +413,17 @@ impl Service<Request> for Router<()> {
 /// A `MakeService` wrapper so `axum::serve(listener, router.into_make_service())`
 /// works.
 #[derive(Debug, Clone)]
-pub struct IntoMakeService<S> {
-    svc: S,
+pub struct IntoMakeService<Svc> {
+    svc: Svc,
 }
 
-impl<S, T> Service<T> for IntoMakeService<S>
+impl<Svc, T> Service<T> for IntoMakeService<Svc>
 where
-    S: Clone,
+    Svc: Clone,
 {
-    type Response = S;
+    type Response = Svc;
     type Error = Infallible;
-    type Future = std::future::Ready<Result<S, Infallible>>;
+    type Future = std::future::Ready<Result<Svc, Infallible>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
