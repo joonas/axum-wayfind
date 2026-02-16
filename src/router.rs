@@ -80,6 +80,7 @@ where
 ///     .route("/users/{id}", get(|| async { "user" }));
 /// # let _: Router = app;
 /// ```
+#[derive(Clone)]
 pub struct Router<S = ()> {
     /// wayfind path tree: maps translated templates to `RouteId`.
     wayfind: wayfind::Router<RouteId>,
@@ -98,21 +99,6 @@ impl<S> fmt::Debug for Router<S> {
         f.debug_struct("Router")
             .field("routes", &self.routes.len())
             .finish_non_exhaustive()
-    }
-}
-
-impl<S> Clone for Router<S>
-where
-    S: Clone,
-{
-    fn clone(&self) -> Self {
-        Self {
-            wayfind: self.wayfind.clone(),
-            routes: self.routes.clone(),
-            route_id_to_path: self.route_id_to_path.clone(),
-            path_to_route_id: self.path_to_route_id.clone(),
-            fallback: self.fallback.clone(),
-        }
     }
 }
 
