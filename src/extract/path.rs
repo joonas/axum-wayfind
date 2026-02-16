@@ -243,7 +243,6 @@ impl fmt::Display for PathDeserializationError {
 impl std::error::Error for PathDeserializationError {}
 
 /// The kinds of errors that can happen when deserializing into a [`Path`].
-#[must_use]
 #[derive(Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ErrorKind {
@@ -382,11 +381,13 @@ pub struct FailedToDeserializePathParams(PathDeserializationError);
 
 impl FailedToDeserializePathParams {
     /// Get a reference to the underlying error kind.
+    #[must_use]
     pub const fn kind(&self) -> &ErrorKind {
         &self.0.kind
     }
 
     /// Convert this error into the underlying error kind.
+    #[must_use]
     pub fn into_kind(self) -> ErrorKind {
         self.0.kind
     }
