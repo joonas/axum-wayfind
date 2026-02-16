@@ -21,6 +21,7 @@
 
 pub mod extract;
 mod router;
+mod strip_prefix;
 mod syntax;
 
 pub use router::{IntoMakeService, Router};

@@ -94,6 +94,12 @@ impl WayfindUrlParams {
         let mut params = Vec::with_capacity(matched.parameters.len());
 
         for (key, value) in &matched.parameters {
+            // Skip internal parameters used by the nesting infrastructure
+            // (e.g. the wildcard tail param in `nest_service` routes).
+            if key.starts_with("__private_") {
+                continue;
+            }
+
             let key: Arc<str> = Arc::from(*key);
 
             match PercentDecodedStr::new(*value) {

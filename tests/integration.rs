@@ -499,6 +499,193 @@ mod tests {
     }
 
     // ==============================================================================
+    // Nesting
+    // ==============================================================================
+
+    #[tokio::test]
+    async fn nest_basic_dispatch() {
+        let api = Router::new()
+            .route("/users", get(|| async { "users" }))
+            .route("/posts", get(|| async { "posts" }));
+
+        let app = Router::new().nest("/api", api);
+
+        let resp = send_request(app.clone(), "GET", "/api/users", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "users");
+
+        let resp = send_request(app.clone(), "GET", "/api/posts", None).await;
+        assert_eq!(get_body(resp).await, "posts");
+
+        // Non-nested path should 404.
+        let resp = send_request(app, "GET", "/users", None).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn nest_path_extraction() {
+        let api = Router::new().route(
+            "/users/{id}",
+            get(|Path(id): Path<u32>| async move { format!("user {id}") }),
+        );
+
+        let app = Router::new().nest("/api", api);
+
+        let resp = send_request(app, "GET", "/api/users/42", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "user 42");
+    }
+
+    #[tokio::test]
+    async fn nest_matched_path() {
+        let api = Router::new().route(
+            "/users/{id}",
+            get(|path: MatchedPath| async move { path.as_str().to_owned() }),
+        );
+
+        let app = Router::new().nest("/api", api);
+
+        let resp = send_request(app, "GET", "/api/users/42", None).await;
+        assert_eq!(get_body(resp).await, "/api/users/{id}");
+    }
+
+    #[tokio::test]
+    async fn nest_strips_prefix_from_uri() {
+        // Verify that handlers see the stripped URI path, not the full one.
+        let api = Router::new().route(
+            "/resource",
+            get(|req: axum::extract::Request| async move { req.uri().path().to_owned() }),
+        );
+
+        let app = Router::new().nest("/api/v1", api);
+
+        let resp = send_request(app, "GET", "/api/v1/resource", None).await;
+        assert_eq!(get_body(resp).await, "/resource");
+    }
+
+    #[tokio::test]
+    async fn nest_with_outer_routes() {
+        let api = Router::new().route("/items", get(|| async { "items" }));
+
+        let app = Router::new()
+            .route("/health", get(|| async { "ok" }))
+            .nest("/api", api);
+
+        let resp = send_request(app.clone(), "GET", "/health", None).await;
+        assert_eq!(get_body(resp).await, "ok");
+
+        let resp = send_request(app, "GET", "/api/items", None).await;
+        assert_eq!(get_body(resp).await, "items");
+    }
+
+    #[tokio::test]
+    async fn nest_with_state() {
+        #[derive(Clone)]
+        struct AppState {
+            prefix: String,
+        }
+
+        let api =
+            Router::new().route(
+                "/greet",
+                get(|State(state): State<AppState>| async move {
+                    format!("hello from {}", state.prefix)
+                }),
+            );
+
+        let app = Router::new().nest("/api", api).with_state(AppState {
+            prefix: "api".to_owned(),
+        });
+
+        let resp = send_request(app, "GET", "/api/greet", None).await;
+        assert_eq!(get_body(resp).await, "hello from api");
+    }
+
+    #[tokio::test]
+    async fn nest_inner_fallback() {
+        let api = Router::new()
+            .route("/known", get(|| async { "known" }))
+            .fallback(|| async { (StatusCode::IM_A_TEAPOT, "api fallback") });
+
+        let app = Router::new().nest("/api", api);
+
+        // Known inner route should work.
+        let resp = send_request(app.clone(), "GET", "/api/known", None).await;
+        assert_eq!(get_body(resp).await, "known");
+
+        // Unknown inner path should use the inner fallback.
+        let resp = send_request(app.clone(), "GET", "/api/unknown", None).await;
+        assert_eq!(resp.status(), StatusCode::IM_A_TEAPOT);
+        assert_eq!(get_body(resp).await, "api fallback");
+
+        // Path outside the nest should use the outer (default 404) fallback.
+        let resp = send_request(app, "GET", "/other", None).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn nest_service_basic() {
+        use tower::service_fn;
+
+        let svc = service_fn(|req: axum::extract::Request| async move {
+            Ok::<_, std::convert::Infallible>(axum::response::IntoResponse::into_response(format!(
+                "service saw: {}",
+                req.uri().path()
+            )))
+        });
+
+        let app = Router::new().nest_service("/api", svc);
+
+        let resp = send_request(app.clone(), "GET", "/api/foo/bar", None).await;
+        assert_eq!(get_body(resp).await, "service saw: /foo/bar");
+
+        // Exact prefix should also work.
+        let resp = send_request(app.clone(), "GET", "/api", None).await;
+        assert_eq!(get_body(resp).await, "service saw: /");
+
+        // Trailing slash should work.
+        let resp = send_request(app, "GET", "/api/", None).await;
+        assert_eq!(get_body(resp).await, "service saw: /");
+    }
+
+    #[tokio::test]
+    async fn nest_service_with_router() {
+        // Nest an axum-wayfind Router as a service under a prefix.
+        let inner = Router::new()
+            .route("/users", get(|| async { "users" }))
+            .route(
+                "/users/{id}",
+                get(|Path(id): Path<u32>| async move { format!("user {id}") }),
+            );
+
+        let app = Router::new().nest_service("/api", inner);
+
+        let resp = send_request(app.clone(), "GET", "/api/users", None).await;
+        assert_eq!(get_body(resp).await, "users");
+
+        let resp = send_request(app, "GET", "/api/users/7", None).await;
+        assert_eq!(get_body(resp).await, "user 7");
+    }
+
+    #[test]
+    #[should_panic(expected = "nesting at the root is not supported")]
+    fn nest_at_root_panics() {
+        drop(Router::<()>::new().nest("/", Router::new()));
+    }
+
+    #[test]
+    #[should_panic(expected = "nesting at the root is not supported")]
+    fn nest_empty_path_panics() {
+        drop(Router::<()>::new().nest("", Router::new()));
+    }
+
+    #[test]
+    #[should_panic(expected = "nest path must not contain wildcards")]
+    fn nest_wildcard_path_panics() {
+        drop(Router::<()>::new().nest("/{*catch_all}", Router::new()));
+    }
+
+    // ==============================================================================
     // route_service
     // ==============================================================================
 

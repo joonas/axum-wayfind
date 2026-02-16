@@ -24,9 +24,12 @@ use std::{
 use axum::routing::MethodRouter;
 use axum_core::{extract::Request, response::IntoResponse};
 use http::StatusCode;
+use tower_layer::Layer;
 use tower_service::Service;
 
-use crate::{extract::matched_path::MatchedPath, extract::path::WayfindUrlParams, syntax};
+use crate::{
+    extract::matched_path::MatchedPath, extract::path::WayfindUrlParams, strip_prefix, syntax,
+};
 
 // ==============================================================================
 // RouteId
@@ -60,6 +63,35 @@ where
             Self::Handler(mr) => Fallback::Handler(Box::new(mr.with_state(state))),
         }
     }
+}
+
+// ==============================================================================
+// Nesting constants and helpers
+// ==============================================================================
+
+/// Private parameter name for the wildcard tail in nested routes.
+/// Parameters with this prefix are filtered from user-visible extractors
+/// in [`WayfindUrlParams::from_match`].
+const NEST_TAIL_PARAM: &str = "__private_nest_tail";
+
+/// Validate a nest path: must start with `/`, must not be empty or `"/"`,
+/// and must not contain wildcard captures.
+#[allow(clippy::panic)] // Intentional: invalid nest paths are programming errors.
+fn validate_nest_path(path: &str) {
+    assert!(
+        !path.is_empty() && path != "/",
+        "nesting at the root is not supported; use `merge` instead"
+    );
+    assert!(
+        path.starts_with('/'),
+        "nest path must start with `/`, got `{path}`"
+    );
+    assert!(
+        !path
+            .split('/')
+            .any(|seg| seg.starts_with("{*") && seg.ends_with('}')),
+        "nest path must not contain wildcards, got `{path}`"
+    );
 }
 
 // ==============================================================================
@@ -190,8 +222,113 @@ where
         self.route(path, axum::routing::any_service(service))
     }
 
-    // TODO: Add `nest` and `nest_service` methods. These require translating
-    // wayfind's prefix-matching semantics to work with axum's nested routers.
+    // =========================================================================
+    // Nesting
+    // =========================================================================
+
+    /// Nest a router under a path prefix.
+    ///
+    /// All routes in `router` are re-registered with `path` prepended, and
+    /// each handler sees the request URI with the prefix stripped — matching
+    /// the behavior of [`axum::Router::nest`].
+    ///
+    /// If the nested router has a custom fallback, it is registered as a
+    /// wildcard catch-all under the prefix. wayfind's priority rules ensure
+    /// that explicit routes match before the catch-all.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `path` is empty, `"/"`, doesn't start with `/`, or
+    /// contains wildcards.
+    #[must_use]
+    #[allow(clippy::expect_used)] // Invariant: every RouteId has a corresponding path entry.
+    #[allow(clippy::panic)] // Intentional: invalid nest paths are programming errors.
+    pub fn nest(mut self, path: &str, router: Self) -> Self {
+        validate_nest_path(path);
+
+        let Self {
+            routes,
+            route_id_to_path,
+            fallback,
+            ..
+        } = router;
+
+        let strip = strip_prefix::StripPrefixLayer::new(path);
+
+        // Flatten: prepend the nest prefix to each inner route and
+        // re-register it in the outer router. StripPrefix ensures handlers
+        // see the URI relative to their original mount point.
+        for (idx, method_router) in routes.into_iter().enumerate() {
+            let id = RouteId(idx);
+            let inner_path = route_id_to_path
+                .get(&id)
+                .expect("every route should have a path");
+            let full_path = format!("{path}{inner_path}");
+            let layered = method_router.layer(strip.clone());
+            self = self.route(&full_path, layered);
+        }
+
+        // If the inner router has a custom fallback, register it as a
+        // wildcard catch-all under the prefix so requests that match the
+        // prefix but not any specific inner route use the inner fallback.
+        if let Fallback::Handler(fallback_mr) = fallback {
+            let layered = (*fallback_mr).layer(strip);
+
+            // Catch-all for sub-paths under the prefix.
+            let wildcard = format!("{path}/{{*{NEST_TAIL_PARAM}}}");
+            self = self.route(&wildcard, layered.clone());
+
+            // Also handle the exact prefix for requests like GET /api
+            // (only if no inner "/" route already occupies this path).
+            if !self.path_to_route_id.contains_key(path) {
+                self = self.route(path, layered);
+            }
+        }
+
+        self
+    }
+
+    /// Nest an arbitrary tower [`Service`] under a path prefix.
+    ///
+    /// The service handles all HTTP methods for any path that starts with
+    /// `path`. The request URI is stripped of the prefix before reaching
+    /// the inner service.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `path` is empty, `"/"`, doesn't start with `/`, or
+    /// contains wildcards.
+    #[must_use]
+    #[allow(clippy::panic)] // Intentional: invalid nest paths are programming errors.
+    pub fn nest_service<T>(self, path: &str, service: T) -> Self
+    where
+        T: Service<Request, Error = Infallible> + Clone + Send + Sync + 'static,
+        T::Response: IntoResponse + 'static,
+        T::Future: Send + 'static,
+    {
+        validate_nest_path(path);
+
+        let stripped = strip_prefix::StripPrefixLayer::new(path).layer(service);
+        let method_router = axum::routing::any_service(stripped);
+
+        // Register three route variants to cover all sub-path forms:
+
+        // 1. Wildcard: /prefix/{*tail} -- matches everything under the prefix.
+        let wildcard = format!("{path}/{{*{NEST_TAIL_PARAM}}}");
+        let mut this = self.route(&wildcard, method_router.clone());
+
+        // 2. Exact prefix: /prefix -- handles requests to the prefix itself.
+        this = this.route(path, method_router.clone());
+
+        // 3. Trailing slash: /prefix/ -- if the prefix doesn't already end
+        //    with `/`, ensure /prefix/ also routes to the service.
+        if !path.ends_with('/') {
+            let with_slash = format!("{path}/");
+            this = this.route(&with_slash, method_router);
+        }
+
+        this
+    }
 
     // =========================================================================
     // Merge
@@ -265,7 +402,7 @@ where
     #[must_use]
     pub fn route_layer<L>(mut self, layer: L) -> Self
     where
-        L: tower_layer::Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
+        L: Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
         L::Service: Service<Request, Error = Infallible> + Clone + Send + Sync + 'static,
         <L::Service as Service<Request>>::Response: IntoResponse + 'static,
         <L::Service as Service<Request>>::Future: Send + 'static,
@@ -281,7 +418,7 @@ where
     #[must_use]
     pub fn layer<L>(mut self, layer: L) -> Self
     where
-        L: tower_layer::Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
+        L: Layer<axum::routing::Route> + Clone + Send + Sync + 'static,
         L::Service: Service<Request> + Clone + Send + Sync + 'static,
         <L::Service as Service<Request>>::Response: IntoResponse + 'static,
         <L::Service as Service<Request>>::Error: Into<Infallible> + 'static,
