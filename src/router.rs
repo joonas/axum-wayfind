@@ -150,10 +150,16 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if the path is invalid or conflicts with an existing route.
+    /// Panics if the path does not start with `/`, is otherwise invalid, or
+    /// conflicts with an existing route.
     #[must_use]
     #[allow(clippy::panic)] // Intentional: builder panics on invalid routes, matching axum's API.
     pub fn route(mut self, path: &str, method_router: MethodRouter<S>) -> Self {
+        assert!(
+            path.starts_with('/'),
+            "path must start with `/`, got `{path}`"
+        );
+
         let path_arc: Arc<str> = Arc::from(path);
 
         // If this path already exists, merge the method routers.
