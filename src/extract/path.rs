@@ -14,7 +14,11 @@ use axum_core::{
 };
 use http::{StatusCode, request::Parts};
 use serde::de::DeserializeOwned;
-use std::{fmt, ops::Deref, sync::Arc};
+use std::{
+    fmt,
+    ops::{Deref, DerefMut},
+    sync::Arc,
+};
 
 // ==============================================================================
 // PercentDecodedStr
@@ -130,6 +134,12 @@ impl<T> Deref for Path<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<T> DerefMut for Path<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
