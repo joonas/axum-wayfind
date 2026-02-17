@@ -265,6 +265,14 @@ where
                 .expect("every route should have a path");
             let full_path = format!("{path}{inner_path}");
             let layered = method_router.layer(strip.clone());
+
+            // When the inner route is "/", the full_path becomes e.g. "/api/".
+            // Also register at the bare prefix ("/api") so requests without a
+            // trailing slash still match.
+            if inner_path.as_ref() == "/" {
+                self = self.route(path, layered.clone());
+            }
+
             self = self.route(&full_path, layered);
         }
 

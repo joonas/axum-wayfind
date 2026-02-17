@@ -667,6 +667,32 @@ mod tests {
         assert_eq!(get_body(resp).await, "user 7");
     }
 
+    #[tokio::test]
+    async fn nest_inner_root_route() {
+        // An inner router with route("/", ...) should be reachable at the bare
+        // prefix (without trailing slash) as well as with a trailing slash.
+        let inner = Router::new()
+            .route("/", get(|| async { "root" }))
+            .route("/other", get(|| async { "other" }));
+
+        let app = Router::new().nest("/api", inner);
+
+        // Bare prefix should match the inner "/" route.
+        let resp = send_request(app.clone(), "GET", "/api", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "root");
+
+        // Trailing slash should also match.
+        let resp = send_request(app.clone(), "GET", "/api/", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "root");
+
+        // Other inner routes still work.
+        let resp = send_request(app, "GET", "/api/other", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "other");
+    }
+
     #[test]
     #[should_panic(expected = "nesting at the root is not supported")]
     fn nest_at_root_panics() {
