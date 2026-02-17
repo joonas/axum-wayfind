@@ -173,11 +173,30 @@ where
     ///
     /// # Panics
     ///
-    /// Panics if the path does not start with `/`, is otherwise invalid, or
+    /// Panics if the path does not start with `/`, contains reserved
+    /// `__private_`-prefixed parameter names, is otherwise invalid, or
     /// conflicts with an existing route.
     #[must_use]
     #[allow(clippy::panic)] // Intentional: builder panics on invalid routes, matching axum's API.
-    pub fn route(mut self, path: &str, method_router: MethodRouter<S>) -> Self {
+    pub fn route(self, path: &str, method_router: MethodRouter<S>) -> Self {
+        // The `__private_` prefix is reserved for internal use by the nesting
+        // infrastructure. Reject it in user-facing routes to prevent parameters
+        // from being silently filtered out during path extraction.
+        assert!(
+            !path.contains("{__private_") && !path.contains("{*__private_"),
+            "parameter names starting with `__private_` are reserved: `{path}`"
+        );
+
+        self.route_inner(path, method_router)
+    }
+
+    /// Internal route registration — no `__private_` name check.
+    ///
+    /// Used by `nest()` and `nest_service()` which legitimately register
+    /// routes containing `__private_`-prefixed wildcard parameters.
+    #[must_use]
+    #[allow(clippy::panic)] // Intentional: builder panics on invalid routes, matching axum's API.
+    fn route_inner(mut self, path: &str, method_router: MethodRouter<S>) -> Self {
         assert!(
             path.starts_with('/'),
             "path must start with `/`, got `{path}`"
@@ -291,11 +310,14 @@ where
         // wildcard catch-all under the prefix so requests that match the
         // prefix but not any specific inner route use the inner fallback.
         if let Fallback::Handler(fallback_mr) = fallback {
+            // `strip` is still available here — the loop only cloned it.
             let layered = (*fallback_mr).layer(strip);
 
             // Catch-all for sub-paths under the prefix.
+            // Uses `route_inner` because the wildcard contains a `__private_`
+            // parameter that would be rejected by `route()`.
             let wildcard = format!("{path}/{{*{NEST_TAIL_PARAM}}}");
-            self = self.route(&wildcard, layered.clone());
+            self = self.route_inner(&wildcard, layered.clone());
 
             // Also handle the exact prefix for requests like GET /api
             // (only if no inner "/" route already occupies this path).
@@ -333,8 +355,10 @@ where
         // Register three route variants to cover all sub-path forms:
 
         // 1. Wildcard: /prefix/{*tail} -- matches everything under the prefix.
+        // Uses `route_inner` because the wildcard contains a `__private_`
+        // parameter that would be rejected by `route()`.
         let wildcard = format!("{path}/{{*{NEST_TAIL_PARAM}}}");
-        let mut this = self.route(&wildcard, method_router.clone());
+        let mut this = self.route_inner(&wildcard, method_router.clone());
 
         // 2. Exact prefix: /prefix -- handles requests to the prefix itself.
         this = this.route(path, method_router.clone());

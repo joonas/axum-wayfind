@@ -770,6 +770,12 @@ mod tests {
         drop(Router::<()>::new().nest("/{*catch_all}", Router::new()));
     }
 
+    #[test]
+    #[should_panic(expected = "parameter names starting with `__private_` are reserved")]
+    fn route_with_reserved_param_name_panics() {
+        drop(Router::<()>::new().route("/{__private_foo}", get(|| async {})));
+    }
+
     // ==============================================================================
     // route_service
     // ==============================================================================
