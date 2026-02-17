@@ -72,6 +72,9 @@ where
     }
 
     fn call(&mut self, mut req: Request<B>) -> Self::Future {
+        // If the prefix doesn't match (e.g. exact-prefix route with no
+        // trailing path segments), forward the original URI unchanged.
+        // This is intentional and matches axum's StripPrefix behavior.
         if let Some(new_uri) = strip_prefix(req.uri(), &self.prefix) {
             *req.uri_mut() = new_uri;
         }
