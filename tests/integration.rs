@@ -693,6 +693,65 @@ mod tests {
         assert_eq!(get_body(resp).await, "other");
     }
 
+    #[tokio::test]
+    async fn nest_double_nesting() {
+        let inner = Router::new().route(
+            "/resource",
+            get(|req: axum::extract::Request| async move { req.uri().path().to_owned() }),
+        );
+
+        let mid = Router::new().nest("/v1", inner);
+        let app = Router::new().nest("/api", mid);
+
+        let resp = send_request(app.clone(), "GET", "/api/v1/resource", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        // Each nesting layer strips its prefix, so the handler sees "/resource".
+        assert_eq!(get_body(resp).await, "/resource");
+
+        // Paths outside the nesting should 404.
+        let resp = send_request(app.clone(), "GET", "/api/resource", None).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let resp = send_request(app, "GET", "/v1/resource", None).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn nest_dynamic_prefix() {
+        let inner = Router::new().route(
+            "/users",
+            get(|req: axum::extract::Request| async move { req.uri().path().to_owned() }),
+        );
+
+        let app = Router::new().nest("/{version}", inner);
+
+        let resp = send_request(app.clone(), "GET", "/v2/users", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "/users");
+
+        let resp = send_request(app, "GET", "/v3/users", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "/users");
+    }
+
+    #[tokio::test]
+    async fn nest_preserves_query_string() {
+        let inner = Router::new().route(
+            "/search",
+            get(|req: axum::extract::Request| async move {
+                req.uri()
+                    .path_and_query()
+                    .map_or_else(|| "no query".to_owned(), |pq| pq.to_string())
+            }),
+        );
+
+        let app = Router::new().nest("/api", inner);
+
+        let resp = send_request(app, "GET", "/api/search?q=hello&page=1", None).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(get_body(resp).await, "/search?q=hello&page=1");
+    }
+
     #[test]
     #[should_panic(expected = "nesting at the root is not supported")]
     fn nest_at_root_panics() {
