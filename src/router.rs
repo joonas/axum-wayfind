@@ -35,8 +35,13 @@ use crate::{
 // RouteId
 // ==============================================================================
 
-/// An opaque identifier for a registered route, used as an index into the
-/// `routes` vector.
+/// An opaque identifier for a registered route.
+///
+/// **Invariant**: `RouteId(n)` is always the index of the corresponding
+/// `MethodRouter` in [`Router::routes`]. IDs are assigned sequentially
+/// starting from 0, with no gaps — so `RouteId(n).0 < routes.len()` holds
+/// for every live ID. Both [`Router::nest`] and [`Router::merge`] depend
+/// on this identity when iterating `routes` by index.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct RouteId(usize);
 
@@ -253,6 +258,12 @@ where
             ..
         } = router;
 
+        debug_assert_eq!(
+            routes.len(),
+            route_id_to_path.len(),
+            "RouteId index invariant violated: routes and path map have different lengths"
+        );
+
         let strip = strip_prefix::StripPrefixLayer::new(path);
 
         // Flatten: prepend the nest prefix to each inner route and
@@ -356,6 +367,12 @@ where
             fallback,
             ..
         } = other;
+
+        debug_assert_eq!(
+            routes.len(),
+            route_id_to_path.len(),
+            "RouteId index invariant violated: routes and path map have different lengths"
+        );
 
         for (old_id, method_router) in routes.into_iter().enumerate() {
             let old_id = RouteId(old_id);
