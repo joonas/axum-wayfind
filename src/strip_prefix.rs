@@ -134,7 +134,12 @@ fn strip_prefix(uri: &Uri, prefix: &str) -> Option<Uri> {
             .expect("valid path+query"),
     };
 
-    let mut parts = uri.clone().into_parts();
+    // Build the new URI from parts without cloning the entire original URI.
+    // For origin-form requests (the common case), scheme and authority are
+    // both None, so this avoids any allocation beyond the path_and_query.
+    let mut parts = http::uri::Parts::default();
+    parts.scheme = uri.scheme().cloned();
+    parts.authority = uri.authority().cloned();
     parts.path_and_query = Some(new_path_and_query);
 
     Some(Uri::from_parts(parts).expect("valid URI"))
